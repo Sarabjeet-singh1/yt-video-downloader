@@ -1,0 +1,10 @@
+outputs/
+downloads/
+videos/
+*.mp4
+*.mov
+*.mkv
+*.webm
+node_modules/
+dist/
+target/

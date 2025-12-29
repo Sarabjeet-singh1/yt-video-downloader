@@ -1,0 +1,37 @@
+[package]
+name = "rust_downloader"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "rust-downloader"
+path = "src/main.rs"
+
+[[bin]]
+name = "cleanup"
+path = "src/cleanup.rs"
+
+[[bin]]
+name = "refresh"
+path = "src/refresh.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+regex = "1"
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5.0"
+tempfile = "3.0"
+libc = { version = "0.2", optional = true }
+tokio = { version = "1.0", features = ["full"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
+
+[profile.release]
+opt-level = 3
+debug = false
+strip = true
+codegen-units = 1
+panic = "abort"
