@@ -65,12 +65,12 @@ impl Downloader {
         let min_recommended = Config::default().wallpaper_settings.min_recommended_resolution;
 
         if resolution < min_recommended as u32 {
-            logger::warning("⚠️  Video quality warning!");
-            logger::warning(&format!("📊 Selected: {}p ({}x{})", resolution, video_format.width.unwrap_or(0), resolution));
-            logger::warning(&format!("🎯 Recommended: {}p for best wallpaper quality", min_recommended));
-            logger::info("💡 Consider finding a higher quality version for better results");
+            logger::warning(" Video quality warning!");
+            logger::warning(&format!("Selected: {}p ({}x{})", resolution, video_format.width.unwrap_or(0), resolution));
+            logger::warning(&format!("Recommended: {}p for best wallpaper quality", min_recommended));
+            logger::info("Consider finding a higher quality version for better results");
         } else {
-            logger::success(&format!("✅ Excellent quality: {}p", resolution));
+            logger::success(&format!("Excellent quality: {}p", resolution));
         }
     }
 
@@ -105,8 +105,8 @@ impl Downloader {
         // Calculate how many loops we need
         let loops_needed = (min_duration / original_duration).ceil() as i32;
 
-        logger::info(&format!("🔄 Creating extended version by looping the video..."));
-        logger::info(&format!("📊 Original: {} → Target: {} ({} loops)", 
+        logger::info(&format!("Creating extended version by looping the video..."));
+        logger::info(&format!("Original: {} → Target: {} ({} loops)", 
             utils::format_time(original_duration), 
             utils::format_time(min_duration), 
             loops_needed));
@@ -146,8 +146,8 @@ impl Downloader {
         if status.success() {
             if output_path.exists() {
                 if let Ok(stats) = fs::metadata(&output_path) {
-                    logger::success(&format!("✅ Video extended successfully: {}", utils::format_file_size(Some(stats.len()))));
-                    logger::info(&format!("🎬 Extended duration: {}", utils::format_time(min_duration)));
+                    logger::success(&format!("Video extended successfully: {}", utils::format_file_size(Some(stats.len()))));
+                    logger::info(&format!("Extended duration: {}", utils::format_time(min_duration)));
                     return Ok(output_path);
                 }
             }
@@ -163,10 +163,10 @@ impl Downloader {
         let success = utils::fix_file_permissions(file_path)?;
 
         if success {
-            logger::success("✅ File permissions fixed successfully");
+            logger::success("File permissions fixed successfully");
         } else {
-            logger::warning("⚠️  Failed to fix file permissions completely");
-            logger::info("💡 You may need to run the cleanup utility later");
+            logger::warning("Failed to fix file permissions completely");
+            logger::info("You may need to run the cleanup utility later");
         }
 
         Ok(())
@@ -175,7 +175,7 @@ impl Downloader {
     async fn cleanup_source_file(&self, source_path: &Path, converted_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         // Verify the converted file exists and has reasonable size
         if !converted_path.exists() {
-            logger::warning("⚠️  Converted file not found, keeping source file");
+            logger::warning("Converted file not found, keeping source file");
             return Ok(());
         }
 
@@ -184,42 +184,42 @@ impl Downloader {
 
         // Basic sanity check - converted file should be at least 10% of source size
         if converted_stats.len() < source_stats.len() / 10 {
-            logger::warning("⚠️  Converted file seems too small, keeping source file for safety");
+            logger::warning(" Converted file seems too small, keeping source file for safety");
             return Ok(());
         }
 
         // Only clean up MP4 files (not other formats)
         if source_path.extension().and_then(|e| e.to_str()) == Some("mp4") {
-            logger::info(&format!("🗑️  Cleaning up source MP4 file: {}", source_path.file_name().unwrap().to_string_lossy()));
+            logger::info(&format!("Cleaning up source MP4 file: {}", source_path.file_name().unwrap().to_string_lossy()));
 
             match fs::remove_file(source_path) {
                 Ok(_) => {
-                    logger::success("✅ Source MP4 file cleaned up successfully");
+                    logger::success("Source MP4 file cleaned up successfully");
                 }
                 Err(e) => {
                     if e.kind() == std::io::ErrorKind::PermissionDenied {
-                        logger::info("🔧 Fixing permissions before cleanup...");
+                        logger::info(" Fixing permissions before cleanup...");
                         match utils::fix_file_permissions(source_path) {
                             Ok(true) => {
                                 match fs::remove_file(source_path) {
-                                    Ok(_) => logger::success("✅ Source MP4 file cleaned up after permission fix"),
+                                    Ok(_) => logger::success("Source MP4 file cleaned up after permission fix"),
                                     Err(second_e) => {
-                                        logger::warning(&format!("⚠️  Could not delete MP4 file: {}", second_e));
-                                        logger::info("💡 You may need to manually delete the MP4 file later");
+                                        logger::warning(&format!("  Could not delete MP4 file: {}", second_e));
+                                        logger::info(" You may need to manually delete the MP4 file later");
                                     }
                                 }
                             }
                             Ok(false) => {
-                                logger::warning(&format!("⚠️  Could not delete MP4 file: {}", e));
-                                logger::info("💡 You may need to manually delete the MP4 file later");
+                                logger::warning(&format!(" Could not delete MP4 file: {}", e));
+                                logger::info("You may need to manually delete the MP4 file later");
                             }
                             Err(perm_e) => {
-                                logger::warning(&format!("⚠️  Permission fix failed: {}", perm_e));
+                                logger::warning(&format!("Permission fix failed: {}", perm_e));
                             }
                         }
                     } else {
-                        logger::warning(&format!("⚠️  Failed to clean up source file: {}", e));
-                        logger::info("💡 Source file will be kept for safety");
+                        logger::warning(&format!("Failed to clean up source file: {}", e));
+                        logger::info(" Source file will be kept for safety");
                     }
                 }
             }
@@ -233,18 +233,18 @@ impl Downloader {
         
         for attempt in 1..=max_attempts {
             if attempt > 1 {
-                logger::info(&format!("🔄 Conversion attempt {}/{}", attempt, max_attempts));
+                logger::info(&format!("Conversion attempt {}/{}", attempt, max_attempts));
             }
 
             if use_fallback {
-                logger::convert("🔄 Converting to HEVC .mov format (software encoding)...");
-                logger::warning("⚠️  Hardware acceleration not available, using software encoding");
+                logger::convert("Converting to HEVC .mov format (software encoding)...");
+                logger::warning(" Hardware acceleration not available, using software encoding");
             } else {
-                logger::convert("🔄 Converting to HEVC .mov format with hardware acceleration...");
-                logger::info("🚀 Using Apple VideoToolbox for optimal performance");
+                logger::convert("Converting to HEVC .mov format with hardware acceleration...");
+                logger::info("Using Apple VideoToolbox for optimal performance");
             }
 
-            logger::info("📊 Conversion settings:");
+            logger::info(" Conversion settings:");
             logger::info("   • Codec: HEVC (H.265) 10-bit");
             logger::info("   • Resolution: 4K (3840x2160)");
             logger::info("   • Frame Rate: 60fps");
@@ -327,7 +327,7 @@ impl Downloader {
                                 String::new()
                             };
                             
-                            logger::progress(&format!("🔄 Converting {} | {} ETA: {}{}", progress_bar, eta, eta, eta_text));
+                            logger::progress(&format!("Converting {} | {} ETA: {}{}", progress_bar, eta, eta, eta_text));
                         }
                     }
                 }
@@ -337,15 +337,15 @@ impl Downloader {
 
             if status.success() {
                 let conversion_time = start_time.elapsed()?.as_secs_f64();
-                logger::success(&format!("✅ HEVC conversion completed in {:.1}s: {}", 
+                logger::success(&format!("HEVC conversion completed in {:.1}s: {}", 
                     conversion_time, 
                     output_path.file_name().unwrap().to_string_lossy()));
 
                 // Verify output file
                 if output_path.exists() {
                     if let Ok(stats) = fs::metadata(output_path) {
-                        logger::stats(&format!("📊 HEVC .mov size: {}", utils::format_file_size(Some(stats.len()))));
-                        logger::info("🎬 Video optimized for macOS live wallpaper with 4K 60fps HEVC");
+                        logger::stats(&format!("HEVC .mov size: {}", utils::format_file_size(Some(stats.len()))));
+                        logger::info("Video optimized for macOS live wallpaper with 4K 60fps HEVC");
 
                         // Fix file permissions and ownership
                         self.fix_file_permissions(output_path)?;
@@ -355,15 +355,15 @@ impl Downloader {
                 }
                 return Err("Conversion completed but output file not found".into());
             } else {
-                logger::warning(&format!("⚠️  Conversion attempt {} failed", attempt));
+                logger::warning(&format!(" Conversion attempt {} failed", attempt));
                 
                 // Determine next attempt settings
                 if !use_fallback && attempt < max_attempts {
                     use_fallback = true;
-                    logger::info("🔄 Next attempt: using software encoding...");
+                    logger::info("Next attempt: using software encoding...");
                 } else if !reencode_audio && attempt < max_attempts {
                     reencode_audio = true;
-                    logger::info("🔄 Next attempt: re-encoding audio...");
+                    logger::info("Next attempt: re-encoding audio...");
                 } else if attempt >= max_attempts {
                     return Err(format!("FFmpeg HEVC conversion failed after {} attempts with code {:?}", attempt, status.code()).into());
                 }
@@ -377,7 +377,7 @@ impl Downloader {
         let output_path = input_path.with_extension("mov");
 
         if output_path.exists() {
-            logger::success(&format!("📁 HEVC .mov version already exists: {}", output_path.file_name().unwrap().to_string_lossy()));
+            logger::success(&format!("HEVC .mov version already exists: {}", output_path.file_name().unwrap().to_string_lossy()));
             return Ok(output_path);
         }
 
@@ -388,11 +388,11 @@ impl Downloader {
         let mut processed_input_path = input_path.to_path_buf();
 
         if duration < min_duration {
-            logger::info(&format!("⏱️  Video duration: {} ({:.1}s)", utils::format_time(duration), duration));
-            logger::info("🔄 Extending video to minimum 3 minutes for better experience...");
+            logger::info(&format!(" Video duration: {} ({:.1}s)", utils::format_time(duration), duration));
+            logger::info(" Extending video to minimum 3 minutes for better experience...");
             processed_input_path = self.extend_video(input_path, min_duration).await?;
         } else {
-            logger::info(&format!("⏱️  Video duration: {}", utils::format_time(duration)));
+            logger::info(&format!("  Video duration: {}", utils::format_time(duration)));
         }
 
         // Try hardware-accelerated HEVC first, fallback to software if needed
@@ -401,9 +401,9 @@ impl Downloader {
         // Clean up temporary extended file if created
         if processed_input_path != *input_path {
             if let Err(e) = fs::remove_file(&processed_input_path) {
-                logger::warning(&format!("⚠️  Could not clean up temporary file: {}", e));
+                logger::warning(&format!("  Could not clean up temporary file: {}", e));
             } else {
-                logger::info("🗑️  Cleaned up temporary extended video file");
+                logger::info("  Cleaned up temporary extended video file");
             }
         }
 
@@ -583,12 +583,12 @@ impl Downloader {
         if exists && !needs_conversion {
             // .mov file already exists, we're done
             final_path = existing_path.unwrap();
-            logger::info("⏭️  Using existing .mov video, no processing needed");
+            logger::info(" Using existing .mov video, no processing needed");
             return Ok(final_path);
         } else if exists && needs_conversion {
             // Source file exists but needs conversion
             final_path = existing_path.unwrap();
-            logger::info("⏭️  Skipping download, using existing video for conversion");
+            logger::info(" Skipping download, using existing video for conversion");
         } else {
             // Need to download
             final_path = self.download_with_retry(
@@ -597,7 +597,7 @@ impl Downloader {
                 &analysis.audio_format,
                 &output_path
             ).await?;
-            logger::success(&format!("📥 Video downloaded successfully: {}", final_path.file_name().unwrap().to_string_lossy()));
+            logger::success(&format!("Video downloaded successfully: {}", final_path.file_name().unwrap().to_string_lossy()));
         }
 
         // Convert to .mov format for wallpaper compatibility

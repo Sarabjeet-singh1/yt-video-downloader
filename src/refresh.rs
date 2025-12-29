@@ -22,20 +22,20 @@ impl RefreshUtility {
     }
 
     pub async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        logger::header("🔄 Wallpaper Refresh Utility");
+        logger::header(" Wallpaper Refresh Utility");
         logger::info("Fix wallpaper animation issues and refresh the wallpaper system");
         logger::info("═══════════════════════════════════════════════════");
 
         // Check if we have access to wallpaper directories
         if !self.customer_dir.exists() {
-            logger::error("❌ Customer directory not found");
+            logger::error(" Customer directory not found");
             logger::info("This utility requires administrator privileges");
             logger::info("Please run with: sudo cargo run --bin refresh");
             return Err("Customer directory not accessible".into());
         }
 
         if !self.target_dir.exists() {
-            logger::warning("⚠️  Target wallpaper directory not found");
+            logger::warning(" Target wallpaper directory not found");
             logger::info("You may need to set up a live wallpaper first");
             return Err("Target directory not found".into());
         }
@@ -44,7 +44,7 @@ impl RefreshUtility {
         self.show_wallpaper_status().await?;
 
         // Perform refresh operations
-        logger::info("🔄 Starting wallpaper refresh process...");
+        logger::info("Starting wallpaper refresh process...");
         
         // Method 1: Restart wallpaper daemon
         self.restart_wallpaper_daemon().await?;
@@ -58,8 +58,8 @@ impl RefreshUtility {
         // Method 4: Refresh through System Events
         self.refresh_via_system_events().await?;
 
-        logger::success("✅ Wallpaper refresh completed!");
-        logger::info("💡 If your wallpaper still appears static:");
+        logger::success(" Wallpaper refresh completed!");
+        logger::info(" If your wallpaper still appears static:");
         logger::info("   1. Try locking and unlocking your screen");
         logger::info("   2. Restart your Mac");
         logger::info("   3. Check System Preferences > Desktop & Screen Saver");
@@ -68,7 +68,7 @@ impl RefreshUtility {
     }
 
     async fn show_wallpaper_status(&self) -> Result<(), Box<dyn std::error::Error>> {
-        logger::info("📊 Current wallpaper status:");
+        logger::info("Current wallpaper status:");
         
         // List wallpapers in the directory
         if let Ok(entries) = std::fs::read_dir(&self.target_dir) {
@@ -86,9 +86,9 @@ impl RefreshUtility {
             }
 
             if wallpapers.is_empty() {
-                logger::warning("📭 No .mov/.mp4 wallpaper files found");
+                logger::warning(" No .mov/.mp4 wallpaper files found");
             } else {
-                logger::info(&format!("📁 Found {} wallpaper file(s):", wallpapers.len()));
+                logger::info(&format!(" Found {} wallpaper file(s):", wallpapers.len()));
                 for (path, metadata) in &wallpapers {
                     let size = crate::utils::format_file_size(Some(metadata.len()));
                     let modified = match metadata.modified() {
@@ -99,21 +99,21 @@ impl RefreshUtility {
                         Err(_) => "Unknown".to_string()
                     };
                     
-                    logger::info(&format!("   📺 {} ({} | Modified: {})", 
+                    logger::info(&format!("   {} ({} | Modified: {})", 
                         path.file_name().unwrap().to_string_lossy(), 
                         size, 
                         modified));
                 }
             }
         } else {
-            logger::warning("⚠️  Could not read wallpaper directory");
+            logger::warning("  Could not read wallpaper directory");
         }
 
         Ok(())
     }
 
     async fn restart_wallpaper_daemon(&self) -> Result<(), Box<dyn std::error::Error>> {
-        logger::info("🔄 Restarting wallpaper daemon...");
+        logger::info("Restarting wallpaper daemon...");
 
         let commands = vec![
             vec!["sudo", "launchctl", "unload", "/System/Library/LaunchDaemons/com.apple.idleassetsd.plist"],
@@ -127,17 +127,17 @@ impl RefreshUtility {
             
             if !output.status.success() {
                 let error = String::from_utf8_lossy(&output.stderr);
-                logger::warning(&format!("⚠️  Daemon command failed: {}", error));
+                logger::warning(&format!(" Daemon command failed: {}", error));
                 break;
             }
         }
 
-        logger::success("✅ Wallpaper daemon restart attempted");
+        logger::success(" Wallpaper daemon restart attempted");
         Ok(())
     }
 
     async fn force_desktop_refresh(&self) -> Result<(), Box<dyn std::error::Error>> {
-        logger::info("🔄 Forcing desktop refresh...");
+        logger::info(" Forcing desktop refresh...");
 
         // Use AppleScript to trigger desktop refresh
         let script = r#"tell application "System Events"
@@ -156,16 +156,16 @@ end tell"#;
             .output()?;
 
         if output.status.success() {
-            logger::success("✅ Desktop refresh triggered");
+            logger::success(" Desktop refresh triggered");
         } else {
-            logger::warning("⚠️  Desktop refresh failed - this is normal on some macOS versions");
+            logger::warning("  Desktop refresh failed - this is normal on some macOS versions");
         }
 
         Ok(())
     }
 
     async fn touch_wallpaper_files(&self) -> Result<(), Box<dyn std::error::Error>> {
-        logger::info("🔄 Touching wallpaper files to trigger refresh...");
+        logger::info(" Touching wallpaper files to trigger refresh...");
 
         // Find all .mov and .mp4 files and touch them
         let find_command = format!("find \"{}\" -name \"*.mov\" -o -name \"*.mp4\" -exec touch {{}} \\; 2>/dev/null", 
@@ -177,16 +177,16 @@ end tell"#;
             .output()?;
 
         if output.status.success() {
-            logger::success("✅ Wallpaper files touched - refresh triggered");
+            logger::success(" Wallpaper files touched - refresh triggered");
         } else {
-            logger::warning("⚠️  Could not touch wallpaper files");
+            logger::warning(" Could not touch wallpaper files");
         }
 
         Ok(())
     }
 
     async fn refresh_via_system_events(&self) -> Result<(), Box<dyn std::error::Error>> {
-        logger::info("🔄 Refreshing via System Events...");
+        logger::info(" Refreshing via System Events...");
 
         // Additional refresh through killall as fallback
         let killall_output = Command::new("killall")
@@ -194,13 +194,13 @@ end tell"#;
             .output()?;
 
         if killall_output.status.success() {
-            logger::info("🔄 Dock restarted (may help with wallpaper refresh)");
+            logger::info("Dock restarted (may help with wallpaper refresh)");
         }
 
         // Wait a moment for the system to settle
         tokio::time::sleep(Duration::from_millis(500)).await;
 
-        logger::success("✅ System events refresh completed");
+        logger::success("System events refresh completed");
         Ok(())
     }
 
@@ -219,9 +219,9 @@ end tell"#;
             .output()?;
         
         if output.status.success() {
-            logger::success("✅ Quick refresh completed!");
+            logger::success("Quick refresh completed!");
         } else {
-            logger::warning("⚠️  Quick refresh partially completed");
+            logger::warning("  Quick refresh partially completed");
         }
 
         Ok(())
@@ -241,13 +241,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut refresh = RefreshUtility::new();
         match refresh.run().await {
             Ok(_) => {
-                logger::success("✅ Wallpaper refresh completed successfully!");
+                logger::success(" Wallpaper refresh completed successfully!");
             }
             Err(error) => {
-                logger::error(&format!("❌ Wallpaper refresh failed: {}", error));
+                logger::error(&format!(" Wallpaper refresh failed: {}", error));
                 
                 // Suggest alternative actions
-                logger::info("💡 Alternative solutions:");
+                logger::info(" Alternative solutions:");
                 logger::info("   1. Lock and unlock your screen");
                 logger::info("   2. Restart your Mac");
                 logger::info("   3. Go to System Preferences > Desktop & Screen Saver");

@@ -161,7 +161,7 @@ impl DependencyChecker {
         logger::info("   • Install wallpaper files in the system directory");
         logger::info("   • Create backups of existing wallpapers");
         logger::info("");
-        logger::info("🔒 Note: Your downloads will be saved to the outputs/ directory with proper ownership");
+        logger::info(" Note: Your downloads will be saved to the outputs/ directory with proper ownership");
 
         Err("Administrator privileges required. Please restart with sudo.".into())
     }
