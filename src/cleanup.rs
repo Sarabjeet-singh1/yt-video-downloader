@@ -202,7 +202,7 @@ impl CleanupUtility {
         }
 
         logger::info("");
-        logger::info("📊 Deletion Summary:");
+        logger::info("Deletion Summary:");
         logger::success(&format!(" Successfully deleted: {} files", success_count));
         if fail_count > 0 {
             logger::warning(&format!(" Failed to delete: {} files", fail_count));
