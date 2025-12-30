@@ -261,3 +261,4 @@ If you encounter any issues or have questions:
 **Made with ❤️ using Rust**
 
 *Transform your desktop with the power of live YouTube wallpapers!*
+# Force redeploy
