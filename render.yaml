@@ -1,0 +1,6 @@
+# Render configuration for Rust YouTube Downloader
+# https://render.com/docs/yaml-config
+
+buildCommand: cargo build --release --bin rust-downloader
+startCommand: cargo run --release --bin rust-downloader
+

@@ -1,0 +1,4 @@
+[build]
+# Default binary to run when using `cargo run`
+default-run = "rust-downloader"
+

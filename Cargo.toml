@@ -2,6 +2,7 @@
 name = "rust_downloader"
 version = "0.1.0"
 edition = "2021"
+default-run = "rust-downloader"
 
 [[bin]]
 name = "rust-downloader"
