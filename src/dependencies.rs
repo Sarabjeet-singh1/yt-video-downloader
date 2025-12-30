@@ -136,7 +136,12 @@ impl DependencyChecker {
 
     pub fn check_sudo_privileges() -> bool {
         // Check if running with elevated privileges
+        #[cfg(target_os = "macos")]
         let is_root = unsafe { libc::geteuid() } == 0;
+        
+        #[cfg(not(target_os = "macos"))]
+        let is_root = false; // On Linux, we can't easily check this without libc
+        
         let has_sudo = env::var("SUDO_USER").is_ok();
 
         if is_root || has_sudo {
