@@ -1,7 +1,4 @@
 # Build outputs
-outputs/
-downloads/
-videos/
 dist/
 build/
 .next/
@@ -46,7 +43,3 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
-
-# Rust
-target/
-Cargo.lock

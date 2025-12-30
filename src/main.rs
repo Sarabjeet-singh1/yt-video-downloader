@@ -5,7 +5,6 @@ use rust_downloader::{logger, Config, video_info, downloader, video_manager, dep
 
 #[derive(Parser, Debug)]
 #[command(name = "rust-downloader")]
-#[command(disable_help_flag = true)]
 #[command(about = "Race into the future with stunning live video! Transform any YouTube video into a dynamic video with precision and speed.", long_about = None)]
 struct Args {
     /// YouTube URL to download (optional). If omitted, you'll be prompted to paste one.
@@ -22,10 +21,6 @@ struct Args {
     /// Custom output directory
     #[arg(short, long)]
     output: Option<PathBuf>,
-    
-    /// Show detailed help information
-    #[arg(short, long)]
-    help: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -146,6 +141,7 @@ fn setup_signal_handlers() {
     logger::info("Signal handlers initialized");
 }
 
+#[allow(dead_code)]
 fn display_usage() {
     logger::header("Rust YouTube Downloader ");
     logger::info("==========================================================");
@@ -189,12 +185,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Initialize logger
     logger::init();
-    
-    // Handle help flag
-    if args.help {
-        display_usage();
-        return Ok(());
-    }
 
     let mut config = Config::default();
     
@@ -208,8 +198,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     
     if let Some(output_dir) = &args.output {
-        config.output_dir = output_dir.clone();
+        config.output_dir = Config::expand_tilde(output_dir.to_str().unwrap_or(""));
     }
+
+    // Ensure output directory exists
+    config.ensure_output_dir_exists()?;
 
     // Handle commands
     let command_result = if let Some(url) = args.url {
@@ -256,7 +249,7 @@ async fn run_with_video(url: &str, config: &Config, _start_time: std::time::Syst
 
     // Perform download and conversion
     let mut downloader = downloader::Downloader::new();
-    let download_path = downloader.perform_download(url, &analysis).await?;
+    let download_path = downloader.perform_download(url, &analysis, config).await?;
 
     // Setup video (only if enabled)
     let video_installed = if config.enable_video {
@@ -290,7 +283,7 @@ async fn run_download_only(url: &str, config: &Config, _start_time: std::time::S
 
     // Perform download and conversion
     let mut downloader = downloader::Downloader::new();
-    let download_path = downloader.perform_download(url, &analysis).await?;
+    let download_path = downloader.perform_download(url, &analysis, config).await?;
 
     Ok((download_path, false))
 }

@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 use std::env;
 
+#[path = "logger.rs"]
+mod logger;
+
 #[derive(Debug, Clone)]
 pub struct VideoPreferences {
     pub preferred_formats: Vec<&'static str>,
@@ -121,7 +124,7 @@ impl Config {
     pub fn default() -> Self {
         Self {
             enable_video: false,
-            output_dir: PathBuf::from("outputs"),
+            output_dir: Self::expand_tilde("~/Downloads"),
             
             video_preferences: VideoPreferences {
                 preferred_formats: vec!["mp4", "mkv", "webm"],
@@ -217,5 +220,33 @@ impl Config {
                 template: "{title}_{quality}.{ext}"
             }
         }
+    }
+
+    /// Expand tilde (~) to user's home directory
+    pub fn expand_tilde(path: &str) -> PathBuf {
+        if path.starts_with("~/") {
+            if let Ok(home) = std::env::var("HOME") {
+                return PathBuf::from(path.replace("~", &home));
+            }
+        }
+        PathBuf::from(path)
+    }
+
+    /// Ensure output directory exists, create if needed
+    pub fn ensure_output_dir_exists(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        // Expand tilde in the output path
+        if self.output_dir.to_string_lossy().starts_with("~/") {
+            self.output_dir = Self::expand_tilde(&self.output_dir.to_string_lossy());
+        }
+
+        // Create directory if it doesn't exist
+        if !self.output_dir.exists() {
+            std::fs::create_dir_all(&self.output_dir)?;
+            logger::success(&format!("Created output directory: {}", self.output_dir.display()));
+        } else if !self.output_dir.is_dir() {
+            return Err(format!("Output path exists but is not a directory: {}", self.output_dir.display()).into());
+        }
+
+        Ok(())
     }
 }

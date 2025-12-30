@@ -22,13 +22,13 @@ impl Downloader {
         }
     }
 
-    fn create_output_filename(&self, info: &crate::video_info::VideoInfo, video_format: &VideoFormat) -> String {
+    fn create_output_filename(&self, info: &crate::video_info::VideoInfo, video_format: &VideoFormat, config: &crate::config::Config) -> String {
         let quality = format!("{}p_{}fps", video_format.height.unwrap_or(0), video_format.fps.unwrap_or(30.0) as u32);
         utils::create_safe_filename(
             &info.title,
             &quality,
             self.get_extension(),
-            Config::default().file_naming.max_title_length,
+            config.file_naming.max_title_length,
         )
     }
 
@@ -60,9 +60,9 @@ impl Downloader {
         (false, None, false)
     }
 
-    fn check_video_quality(&self, video_format: &VideoFormat) {
+    fn check_video_quality(&self, video_format: &VideoFormat, config: &crate::config::Config) {
         let resolution = video_format.height.unwrap_or(0);
-        let min_recommended = Config::default().video_settings.min_recommended_resolution;
+        let min_recommended = config.video_settings.min_recommended_resolution;
 
         if resolution < min_recommended as u32 {
             logger::warning(" Video quality warning!");
@@ -438,8 +438,6 @@ impl Downloader {
             std::process::exit(0);
         };
 
-        // Note: In a full implementation, we'd set up proper signal handlers
-        // For now, we'll just note that this would be implemented
         let _ = cleanup;
     }
 
@@ -585,16 +583,17 @@ impl Downloader {
         false
     }
 
-    pub async fn perform_download(&mut self, url: &str, analysis: &SelectedFormats) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    pub async fn perform_download(&mut self, url: &str, analysis: &SelectedFormats, config: &crate::config::Config) -> Result<PathBuf, Box<dyn std::error::Error>> {
         // Setup cleanup handlers
         self.setup_cleanup_handlers();
 
         // Check video quality and warn if needed
-        self.check_video_quality(&analysis.video_format);
+        self.check_video_quality(&analysis.video_format, config);
 
         // Create output filename
-        let output_filename = self.create_output_filename(&analysis.info, &analysis.video_format);
-        let output_path = utils::get_output_path(&output_filename);
+        let output_filename = self.create_output_filename(&analysis.info, &analysis.video_format, config);
+        let output_path = config.output_dir.join(&output_filename);
+        utils::ensure_directory_exists(&config.output_dir).ok();
 
         // Check if video already exists
         let (exists, existing_path, needs_conversion) = self.check_existing_video(&output_path);
