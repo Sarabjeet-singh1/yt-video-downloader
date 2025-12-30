@@ -4,7 +4,7 @@ pub mod logger;
 pub mod utils;
 pub mod video_info;
 pub mod downloader;
-pub mod wallpaper_manager;
+pub mod video_manager;
 pub mod dependencies;
 
 // Re-export commonly used types
@@ -13,5 +13,5 @@ pub use logger::*;
 pub use utils::*;
 pub use video_info::{analyze, VideoInfo, SelectedFormats, VideoFormat, AudioFormat};
 pub use downloader::Downloader;
-pub use wallpaper_manager::WallpaperManager;
+pub use video_manager::VideoManager;
 pub use dependencies::DependencyChecker;

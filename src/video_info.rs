@@ -86,7 +86,7 @@ fn analyze_formats(formats: &[Value]) -> (Vec<VideoFormat>, Vec<AudioFormat>, Ve
     let config = Config::default();
     
     // Filter video formats
-    let mut video_formats: Vec<VideoFormat> = formats
+    let video_formats: Vec<VideoFormat> = formats
         .iter()
         .filter_map(|f| {
             let vcodec = f.get("vcodec")?.as_str()?;
@@ -117,7 +117,7 @@ fn analyze_formats(formats: &[Value]) -> (Vec<VideoFormat>, Vec<AudioFormat>, Ve
         .collect();
 
     // Filter audio formats
-    let mut audio_formats: Vec<AudioFormat> = formats
+    let audio_formats: Vec<AudioFormat> = formats
         .iter()
         .filter_map(|f| {
             let acodec = f.get("acodec")?.as_str()?;
@@ -148,7 +148,7 @@ fn analyze_formats(formats: &[Value]) -> (Vec<VideoFormat>, Vec<AudioFormat>, Ve
         .collect();
 
     // Combined formats (video + audio)
-    let mut combined_formats: Vec<VideoFormat> = formats
+    let combined_formats: Vec<VideoFormat> = formats
         .iter()
         .filter_map(|f| {
             let vcodec = f.get("vcodec")?.as_str()?;

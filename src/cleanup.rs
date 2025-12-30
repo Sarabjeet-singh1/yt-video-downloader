@@ -1,6 +1,6 @@
 use std::fs;
 use std::path::PathBuf;
-use std::process::Command;
+
 use std::io::Write;
 use rust_downloader::{logger, utils, Config};
 use std::os::unix::fs::MetadataExt;
@@ -15,7 +15,7 @@ impl CleanupUtility {
     pub fn new() -> Self {
         let config = Config::default();
         let output_dir = config.output_dir.clone();
-        let backup_dir = output_dir.join(config.wallpaper_settings.backup_dir);
+        let backup_dir = output_dir.join(config.video_settings.backup_dir);
         
         Self {
             output_dir,

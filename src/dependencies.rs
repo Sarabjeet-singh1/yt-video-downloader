@@ -14,13 +14,13 @@ pub struct DependencyResult {
 }
 
 pub struct DependencyChecker {
-    config: Config,
+    _config: Config,
 }
 
 impl DependencyChecker {
     pub fn new() -> Self {
         Self {
-            config: Config::default(),
+            _config: Config::default(),
         }
     }
 
@@ -199,7 +199,7 @@ impl DependencyChecker {
 
         // Check sudo privileges first only when wallpaper installation is enabled
         let config = Config::default();
-        if config.enable_wallpaper {
+        if config.enable_video {
             if !Self::check_sudo_privileges() {
                 Self::prompt_for_sudo()?;
             }

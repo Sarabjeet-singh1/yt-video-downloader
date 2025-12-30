@@ -28,7 +28,8 @@ const SYMBOL_CONVERT: &str = "CONVERT:";
 
 fn init_start_time() {
     unsafe {
-        if START_TIME.is_none() {
+        let ptr = &raw const START_TIME as *const Option<SystemTime>;
+        if (*ptr).is_none() {
             START_TIME = Some(SystemTime::now());
         }
     }

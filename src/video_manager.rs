@@ -7,7 +7,7 @@ use crate::logger;
 use crate::Config;
 use crate::utils;
 
-pub struct WallpaperManager {
+pub struct VideoManager {
     customer_dir: PathBuf,
     target_dir: PathBuf,
     backup_dir: PathBuf,
@@ -15,26 +15,26 @@ pub struct WallpaperManager {
     retry_interval: Duration,
 }
 
-impl WallpaperManager {
+impl VideoManager {
     pub fn new() -> Self {
         let config = Config::default();
-        let customer_dir = PathBuf::from(config.wallpaper_settings.customer_dir);
-        let target_dir = customer_dir.join(config.wallpaper_settings.target_sub_dir);
-        let backup_dir = config.output_dir.join(config.wallpaper_settings.backup_dir);
+        let customer_dir = PathBuf::from(config.video_settings.customer_dir);
+        let target_dir = customer_dir.join(config.video_settings.target_sub_dir);
+        let backup_dir = config.output_dir.join(config.video_settings.backup_dir);
         
         Self {
             customer_dir,
             target_dir,
             backup_dir,
-            retry_attempts: config.wallpaper_settings.max_retry_attempts,
-            retry_interval: Duration::from_millis(config.wallpaper_settings.retry_interval),
+            retry_attempts: config.video_settings.max_retry_attempts,
+            retry_interval: Duration::from_millis(config.video_settings.retry_interval),
         }
     }
 
     async fn check_customer_directory(&self) -> Result<bool, Box<dyn std::error::Error>> {
         if !self.customer_dir.exists() {
             logger::error(" Customer directory not found");
-            logger::info("This usually means macOS wallpaper system is not initialized");
+            logger::info("This usually means macOS video system is not initialized");
             return Ok(false);
         }
 
@@ -60,11 +60,11 @@ impl WallpaperManager {
         }
     }
 
-    fn get_existing_wallpapers(&self) -> Vec<WallpaperFile> {
-        let mut wallpapers = Vec::new();
+    fn get_existing_videos(&self) -> Vec<VideoFile> {
+        let mut videos = Vec::new();
         
         if !self.target_dir.exists() {
-            return wallpapers;
+            return videos;
         }
 
         if let Ok(entries) = fs::read_dir(&self.target_dir) {
@@ -74,7 +74,7 @@ impl WallpaperManager {
                    path.extension().and_then(|e| e.to_str()) == Some("mp4") {
                     
                     if let Ok(metadata) = fs::metadata(&path) {
-                        wallpapers.push(WallpaperFile {
+                        videos.push(VideoFile {
                             name: path.file_name().unwrap().to_string_lossy().to_string(),
                             path: path.clone(),
                             size: metadata.len(),
@@ -87,18 +87,18 @@ impl WallpaperManager {
         }
 
         // Sort by most recently modified
-        wallpapers.sort_by(|a, b| b.modified.cmp(&a.modified));
-        wallpapers
+        videos.sort_by(|a, b| b.modified.cmp(&a.modified));
+        videos
     }
 
     fn is_target_directory_empty(&self) -> bool {
-        self.get_existing_wallpapers().is_empty()
+        self.get_existing_videos().is_empty()
     }
 
-    async fn open_wallpaper_settings(&self) -> Result<bool, Box<dyn std::error::Error>> {
-        logger::info("🔧 Opening System Preferences > Wallpaper...");
+    async fn open_video_settings(&self) -> Result<bool, Box<dyn std::error::Error>> {
+        logger::info("🔧 Opening System Preferences > video...");
 
-        // Use AppleScript to open wallpaper settings
+        // Use AppleScript to open video settings
         let script = r#"tell application "System Preferences"
     activate
     set current pane to pane "com.apple.preference.desktopscreeneffect"
@@ -113,20 +113,20 @@ end tell"#;
             Ok(true)
         } else {
             logger::warning("Could not open System Preferences automatically");
-            logger::info("Please manually open: System Preferences > Wallpaper");
+            logger::info("Please manually open: System Preferences > video");
             Ok(false)
         }
     }
 
-    async fn open_finder_at_wallpaper_dir(&self) -> Result<bool, Box<dyn std::error::Error>> {
-        logger::info(" Opening Finder at wallpaper directory...");
+    async fn open_finder_at_video_dir(&self) -> Result<bool, Box<dyn std::error::Error>> {
+        logger::info(" Opening Finder at video directory...");
 
         let output = Command::new("open")
             .arg(&self.target_dir)
             .output()?;
 
         if output.status.success() {
-            logger::success(" Finder opened at wallpaper directory");
+            logger::success(" Finder opened at video directory");
             Ok(true)
         } else {
             logger::warning("Could not open Finder automatically");
@@ -135,22 +135,22 @@ end tell"#;
         }
     }
 
-    async fn wait_for_wallpaper_setup(&self) -> Result<WallpaperFile, Box<dyn std::error::Error>> {
-        logger::info(" Waiting for you to download a landscape wallpaper...");
+    async fn wait_for_video_setup(&self) -> Result<VideoFile, Box<dyn std::error::Error>> {
+        logger::info(" Waiting for you to download a landscape video...");
         logger::info(" Steps:");
         logger::info("   1. In System Preferences > Wallpaper");
         logger::info("   2. Scroll to \"Landscape\" section");
-        logger::info("   3. Download any landscape wallpaper (e.g., \"Sonoma Horizon\")");
+        logger::info("   3. Download any landscape video (e.g., \"Sonoma Horizon\")");
         logger::info("   4. This tool will detect it automatically");
         
         let mut attempts = 0;
         
         while attempts < self.retry_attempts {
-            let wallpapers = self.get_existing_wallpapers();
+            let videos = self.get_existing_videos();
             
-            if !wallpapers.is_empty() {
-                logger::success(&format!(" Detected wallpaper: {}", wallpapers[0].name));
-                return Ok(wallpapers[0].clone());
+            if !videos.is_empty() {
+                logger::success(&format!(" Detected video: {}", videos[0].name));
+                return Ok(videos[0].clone());
             }
             
             // Show progress dots
@@ -161,19 +161,19 @@ end tell"#;
         }
         
         println!(); // New line after dots
-        Err("Timeout waiting for wallpaper setup. Please download a landscape wallpaper and try again.".into())
+        Err("Timeout waiting for video setup. Please download a landscape video and try again.".into())
     }
 
-    async fn create_backup(&self, wallpaper_file: &WallpaperFile) -> Result<Option<PathBuf>, Box<dyn std::error::Error>> {
+    async fn create_backup(&self, video_file: &VideoFile) -> Result<Option<PathBuf>, Box<dyn std::error::Error>> {
         utils::ensure_directory_exists(&self.backup_dir)?;
 
         let timestamp = chrono::Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
         let backup_name = format!("{}_backup_{}.mov", 
-            wallpaper_file.name.trim_end_matches(".mov").trim_end_matches(".mp4"), 
+            video_file.name.trim_end_matches(".mov").trim_end_matches(".mp4"), 
             timestamp);
         let backup_path = self.backup_dir.join(&backup_name);
 
-        fs::copy(&wallpaper_file.path, &backup_path)?;
+        fs::copy(&video_file.path, &backup_path)?;
 
         // Fix permissions for the backup file
         logger::info("🔧 Fixing backup file permissions...");
@@ -189,10 +189,10 @@ end tell"#;
         Ok(Some(backup_path))
     }
 
-    async fn install_wallpaper(&self, video_path: &Path, target_wallpaper_name: &str) -> Result<bool, Box<dyn std::error::Error>> {
-        let target_path = self.target_dir.join(target_wallpaper_name);
+    async fn install_video(&self, video_path: &Path, target_video_name: &str) -> Result<bool, Box<dyn std::error::Error>> {
+        let target_path = self.target_dir.join(target_video_name);
 
-        logger::info(&format!(" Installing wallpaper: {}", target_wallpaper_name));
+        logger::info(&format!(" Installing video: {}", target_video_name));
 
         // Copy video to target location
         fs::copy(video_path, &target_path)?;
@@ -200,11 +200,11 @@ end tell"#;
         // Verify installation
         if target_path.exists() {
             if let Ok(stats) = fs::metadata(&target_path) {
-                logger::success(" Wallpaper installed successfully");
+                logger::success(" video installed successfully");
                 logger::stats(&format!(" Size: {}", utils::format_file_size(Some(stats.len()))));
 
-                // Refresh wallpaper system to ensure animation works
-                self.refresh_wallpaper_system().await?;
+                // Refresh video system to ensure animation works
+                self.refresh_video_system().await?;
 
                 return Ok(true);
             }
@@ -212,23 +212,23 @@ end tell"#;
         Err("Installation verification failed".into())
     }
 
-    async fn refresh_wallpaper_system(&self) -> Result<(), Box<dyn std::error::Error>> {
-        logger::info("Refreshing wallpaper system to ensure animation works...");
+    async fn refresh_video_system(&self) -> Result<(), Box<dyn std::error::Error>> {
+        logger::info("Refreshing video system to ensure animation works...");
 
-        // Method 1: Restart the wallpaper daemon
-        self.restart_wallpaper_daemon().await?;
+        // Method 1: Restart the video daemon
+        self.restart_video_daemon().await?;
 
         // Method 2: Force refresh through AppleScript
-        self.force_wallpaper_refresh().await?;
+        self.force_video_refresh().await?;
 
-        logger::success(" Wallpaper system refreshed");
-        logger::info(" If wallpaper appears static after screen lock, run: cargo run --bin refresh");
+        logger::success(" video system refreshed");
+        logger::info(" If video appears static after screen lock, run: cargo run --bin refresh");
 
         Ok(())
     }
 
-    async fn restart_wallpaper_daemon(&self) -> Result<(), Box<dyn std::error::Error>> {
-        logger::info(" Restarting wallpaper daemon...");
+    async fn restart_video_daemon(&self) -> Result<(), Box<dyn std::error::Error>> {
+        logger::info(" Restarting video daemon...");
 
         let commands = [
             vec!["sudo", "launchctl", "unload", "/System/Library/LaunchDaemons/com.apple.idleassetsd.plist"],
@@ -246,12 +246,12 @@ end tell"#;
             }
         }
 
-        logger::success(" Wallpaper daemon restarted");
+        logger::success(" video daemon restarted");
         Ok(())
     }
 
-    async fn force_wallpaper_refresh(&self) -> Result<(), Box<dyn std::error::Error>> {
-        logger::info(" Forcing wallpaper refresh...");
+    async fn force_video_refresh(&self) -> Result<(), Box<dyn std::error::Error>> {
+        logger::info(" Forcing video refresh...");
 
         // Method 1: Desktop refresh via AppleScript
         let script = r#"tell application "System Events"
@@ -269,7 +269,7 @@ end tell"#;
             .output()?;
 
         if !output.status.success() {
-            // Method 2: Touch wallpaper files as fallback
+            // Method 2: Touch video files as fallback
             let touch_command = format!("find \"{}\" -name \"*.mov\" -exec touch {{}} \\; 2>/dev/null", 
                 self.target_dir.display());
             let _ = Command::new("sh")
@@ -277,43 +277,43 @@ end tell"#;
                 .arg(&touch_command)
                 .output()?;
             
-            logger::warning("  Could not force wallpaper refresh");
+            logger::warning("  Could not force video refresh");
         } else {
-            logger::success(" Wallpaper refresh triggered");
+            logger::success(" video refresh triggered");
         }
 
         Ok(())
     }
 
-    async fn select_wallpaper_from_list(&self, wallpapers: &[WallpaperFile]) -> Result<Option<WallpaperFile>, Box<dyn std::error::Error>> {
-        logger::wallpaper("  Multiple wallpapers found in directory");
-        logger::info(" Opening Finder to help you identify the current wallpaper...");
+    async fn select_video_from_list(&self, videos: &[VideoFile]) -> Result<Option<VideoFile>, Box<dyn std::error::Error>> {
+        logger::video("  Multiple videos found in directory");
+        logger::info(" Opening Finder to help you identify the current video...");
 
-        // Open Finder to help user identify current wallpaper
-        self.open_finder_at_wallpaper_dir().await?;
+        // Open Finder to help user identify current video
+        self.open_finder_at_video_dir().await?;
 
         println!();
-        logger::info(" Available wallpapers:");
+        logger::info(" Available videos:");
         println!();
 
-        for (i, wallpaper) in wallpapers.iter().enumerate() {
-            let created_date = chrono::DateTime::<chrono::Local>::from(wallpaper.created).format("%Y-%m-%d %H:%M");
-            let size = utils::format_file_size(Some(wallpaper.size));
+        for (i, video) in videos.iter().enumerate() {
+            let created_date = chrono::DateTime::<chrono::Local>::from(video.created).format("%Y-%m-%d %H:%M");
+            let size = utils::format_file_size(Some(video.size));
 
-            println!("  {}. {}", i + 1, wallpaper.name);
+            println!("  {}. {}", i + 1, video.name);
             println!("      Created: {}", created_date);
             println!("      Size: {}", size);
             println!();
         }
 
         logger::info(" Instructions:");
-        logger::info("   1. Check which wallpaper is currently active in System Preferences");
+        logger::info("   1. Check which video is currently active in System Preferences");
         logger::info("   2. Find the matching file in the Finder window that opened");
-        logger::info("   3. Enter the number corresponding to that wallpaper");
+        logger::info("   3. Enter the number corresponding to that video");
         println!();
 
         // Simple prompt for user input
-        print!(" Select wallpaper to replace (1-{}) or 'c' to cancel: ", wallpapers.len());
+        print!(" Select video to replace (1-{}) or 'c' to cancel: ", videos.len());
         std::io::stdout().flush().ok();
 
         loop {
@@ -327,19 +327,19 @@ end tell"#;
             }
             
             match trimmed_input.parse::<usize>() {
-                Ok(choice) if choice >= 1 && choice <= wallpapers.len() => {
-                    return Ok(Some(wallpapers[choice - 1].clone()));
+                Ok(choice) if choice >= 1 && choice <= videos.len() => {
+                    return Ok(Some(videos[choice - 1].clone()));
                 }
                 _ => {
-                    logger::warning(&format!(" Invalid choice. Please enter a number between 1 and {}, or 'c' to cancel.", wallpapers.len()));
+                    logger::warning(&format!(" Invalid choice. Please enter a number between 1 and {}, or 'c' to cancel.", videos.len()));
                 }
             }
         }
     }
 
-    async fn get_user_confirmation(&self, selected_wallpaper: &WallpaperFile, new_video_path: &Path) -> Result<bool, Box<dyn std::error::Error>> {
-        logger::warning(&format!("  About to replace: {}", selected_wallpaper.name));
-        logger::info(&format!(" Current size: {}", utils::format_file_size(Some(selected_wallpaper.size))));
+    async fn get_user_confirmation(&self, selected_video: &VideoFile, new_video_path: &Path) -> Result<bool, Box<dyn std::error::Error>> {
+        logger::warning(&format!("  About to replace: {}", selected_video.name));
+        logger::info(&format!(" Current size: {}", utils::format_file_size(Some(selected_video.size))));
 
         if let Ok(new_stats) = fs::metadata(new_video_path) {
             logger::info(&format!(" New video size: {}", utils::format_file_size(Some(new_stats.len()))));
@@ -354,90 +354,90 @@ end tell"#;
         Ok(input.trim().to_lowercase() == "y" || input.trim().to_lowercase() == "yes")
     }
 
-    pub async fn setup_wallpaper(&self, video_path: &Path) -> Result<bool, Box<dyn std::error::Error>> {
-        logger::header("  Wallpaper Installation");
+    pub async fn setup_video(&self, video_path: &Path) -> Result<bool, Box<dyn std::error::Error>> {
+        logger::header("  Video Installation");
         
         // Check directory access
         let has_access = self.check_customer_directory().await?;
         if !has_access {
-            return Err("Cannot access wallpaper directory. Please check permissions.".into());
+            return Err("Cannot access video directory. Please check permissions.".into());
         }
         
         // Check if directory is empty
         if self.is_target_directory_empty() {
-            logger::warning(" Wallpaper directory is empty");
-            logger::info(" You need to download a landscape wallpaper first");
+            logger::warning(" Video directory is empty");
+            logger::info(" You need to download a landscape video first");
             
             // Open System Preferences
-            self.open_wallpaper_settings().await?;
+            self.open_video_settings().await?;
             
-            // Wait for user to setup wallpaper
-            let wallpaper_file = self.wait_for_wallpaper_setup().await?;
+            // Wait for user to setup video
+            let video_file = self.wait_for_video_setup().await?;
             
             // Create backup
-            self.create_backup(&wallpaper_file).await?;
+            self.create_backup(&video_file).await?;
             
-            // Install new wallpaper
-            let success = self.install_wallpaper(video_path, &wallpaper_file.name).await?;
+            // Install new video
+            let success = self.install_video(video_path, &video_file.name).await?;
             return Ok(success);
         } else {
-            // Directory has existing wallpapers
-            let existing_wallpapers = self.get_existing_wallpapers();
+            // Directory has existing videos
+            let existing_videos = self.get_existing_videos();
 
-            if existing_wallpapers.is_empty() {
-                logger::warning("No .mov/.mp4 files found in wallpaper directory");
-                logger::info("You need to download a landscape wallpaper first");
+            if existing_videos.is_empty() {
+                logger::warning("No .mov/.mp4 files found in video directory");
+                logger::info("You need to download a landscape video first");
 
                 // Open System Preferences
-                self.open_wallpaper_settings().await?;
+                self.open_video_settings().await?;
 
-                // Wait for user to setup wallpaper
-                let wallpaper_file = self.wait_for_wallpaper_setup().await?;
+                // Wait for user to setup video
+                let video_file = self.wait_for_video_setup().await?;
 
                 // Create backup
-                self.create_backup(&wallpaper_file).await?;
+                self.create_backup(&video_file).await?;
 
-                // Install new wallpaper
-                let success = self.install_wallpaper(video_path, &wallpaper_file.name).await?;
+                // Install new video
+                let success = self.install_video(video_path, &video_file.name).await?;
                 return Ok(success);
-            } else if existing_wallpapers.len() == 1 {
-                // Single wallpaper found - use existing logic
-                let target_wallpaper = &existing_wallpapers[0];
+            } else if existing_videos.len() == 1 {
+                // Single video found - use existing logic
+                let target_video = &existing_videos[0];
 
                 // Get user confirmation
-                let confirmed = self.get_user_confirmation(target_wallpaper, video_path).await?;
+                let confirmed = self.get_user_confirmation(target_video, video_path).await?;
                 if !confirmed {
-                    logger::info(" Wallpaper installation cancelled by user");
+                    logger::info(" Video installation cancelled by user");
                     return Ok(false);
                 }
 
                 // Create backup
-                self.create_backup(target_wallpaper).await?;
+                self.create_backup(target_video).await?;
 
-                // Install new wallpaper
-                let success = self.install_wallpaper(video_path, &target_wallpaper.name).await?;
+                // Install new video
+                let success = self.install_video(video_path, &target_video.name).await?;
                 return Ok(success);
             } else {
-                // Multiple wallpapers found - let user choose
-                logger::info(&format!(" Found {} wallpapers in directory", existing_wallpapers.len()));
+                // Multiple videos found - let user choose
+                logger::info(&format!(" Found {} videos in directory", existing_videos.len()));
 
-                let selected_wallpaper = self.select_wallpaper_from_list(&existing_wallpapers).await?;
-                if let Some(wallpaper) = selected_wallpaper {
-                    // Get user confirmation for the selected wallpaper
-                    let confirmed = self.get_user_confirmation(&wallpaper, video_path).await?;
+                let selected_video = self.select_video_from_list(&existing_videos).await?;
+                if let Some(video) = selected_video {
+                    // Get user confirmation for the selected video
+                    let confirmed = self.get_user_confirmation(&video, video_path).await?;
                     if !confirmed {
-                        logger::info(" Wallpaper installation cancelled by user");
+                        logger::info(" Video installation cancelled by user");
                         return Ok(false);
                     }
 
                     // Create backup
-                    self.create_backup(&wallpaper).await?;
+                    self.create_backup(&video).await?;
 
-                    // Install new wallpaper
-                    let success = self.install_wallpaper(video_path, &wallpaper.name).await?;
+                    // Install new video
+                    let success = self.install_video(video_path, &video.name).await?;
                     return Ok(success);
                 } else {
-                    logger::info(" Wallpaper installation cancelled by user");
+                    logger::info(" Video installation cancelled by user");
                     return Ok(false);
                 }
             }
@@ -446,7 +446,7 @@ end tell"#;
 }
 
 #[derive(Debug, Clone)]
-pub struct WallpaperFile {
+pub struct VideoFile {
     pub name: String,
     pub path: PathBuf,
     pub size: u64,

@@ -1,6 +1,6 @@
 use serde_json::Value;
 use std::process::{Command, Stdio};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
@@ -62,7 +62,7 @@ impl Downloader {
 
     fn check_video_quality(&self, video_format: &VideoFormat) {
         let resolution = video_format.height.unwrap_or(0);
-        let min_recommended = Config::default().wallpaper_settings.min_recommended_resolution;
+        let min_recommended = Config::default().video_settings.min_recommended_resolution;
 
         if resolution < min_recommended as u32 {
             logger::warning(" Video quality warning!");
@@ -229,8 +229,9 @@ impl Downloader {
     }
 
     async fn convert_with_hevc(&self, input_path: &Path, output_path: &Path, mut use_fallback: bool, mut reencode_audio: bool) -> Result<PathBuf, Box<dyn std::error::Error>> {
-        let max_attempts = 3;
-        
+        let config = Config::default();
+        let max_attempts = config.conversion_settings.max_attempts;
+
         for attempt in 1..=max_attempts {
             if attempt > 1 {
                 logger::info(&format!("Conversion attempt {}/{}", attempt, max_attempts));
@@ -294,10 +295,16 @@ impl Downloader {
             let stderr = child.stderr.take().unwrap();
             let reader = BufReader::new(stderr);
 
+            // Collect stderr for error reporting
+            let mut stderr_output = String::new();
+
             // Parse progress
             let mut video_duration = None;
             for line in reader.lines() {
                 if let Ok(line) = line {
+                    stderr_output.push_str(&line);
+                    stderr_output.push('\n');
+
                     // Extract video duration from initial output
                     if video_duration.is_none() && line.contains("Duration:") {
                         if let Some(duration_match) = line.split("Duration: ").nth(1) {
@@ -316,8 +323,8 @@ impl Downloader {
                     if let Some(progress_data) = utils::parse_progress(&line) {
                         let (percentage, _, _, eta) = progress_data;
                         let progress_bar = utils::create_progress_bar(percentage, 20);
-                        
-                        if let Some(duration) = video_duration {
+
+                        if let Some(_duration) = video_duration {
                             let elapsed = start_time.elapsed()?.as_secs_f64();
                             let eta_text = if percentage > 5.0 {
                                 let estimated_total = elapsed / (percentage / 100.0);
@@ -326,7 +333,7 @@ impl Downloader {
                             } else {
                                 String::new()
                             };
-                            
+
                             logger::progress(&format!("Converting {} | {} ETA: {}{}", progress_bar, eta, eta, eta_text));
                         }
                     }
@@ -337,8 +344,8 @@ impl Downloader {
 
             if status.success() {
                 let conversion_time = start_time.elapsed()?.as_secs_f64();
-                logger::success(&format!("HEVC conversion completed in {:.1}s: {}", 
-                    conversion_time, 
+                logger::success(&format!("HEVC conversion completed in {:.1}s: {}",
+                    conversion_time,
                     output_path.file_name().unwrap().to_string_lossy()));
 
                 // Verify output file
@@ -355,8 +362,19 @@ impl Downloader {
                 }
                 return Err("Conversion completed but output file not found".into());
             } else {
-                logger::warning(&format!(" Conversion attempt {} failed", attempt));
-                
+                logger::warning(&format!(" Conversion attempt {} failed with exit code {:?}", attempt, status.code()));
+
+                // Log FFmpeg stderr output for diagnostics
+                if !stderr_output.is_empty() {
+                    logger::error("FFmpeg error output:");
+                    for line in stderr_output.lines().take(10) { // Limit to first 10 lines
+                        logger::error(&format!("  {}", line));
+                    }
+                    if stderr_output.lines().count() > 10 {
+                        logger::error("  ... (truncated)");
+                    }
+                }
+
                 // Determine next attempt settings
                 if !use_fallback && attempt < max_attempts {
                     use_fallback = true;
@@ -365,7 +383,8 @@ impl Downloader {
                     reencode_audio = true;
                     logger::info("Next attempt: re-encoding audio...");
                 } else if attempt >= max_attempts {
-                    return Err(format!("FFmpeg HEVC conversion failed after {} attempts with code {:?}", attempt, status.code()).into());
+                    return Err(format!("FFmpeg HEVC conversion failed after {} attempts with code {:?}. Last error output:\n{}",
+                        attempt, status.code(), stderr_output).into());
                 }
             }
         }
@@ -383,7 +402,7 @@ impl Downloader {
 
         // Check video duration and extend if needed
         let duration = self.get_video_duration(input_path).await?;
-        let min_duration = Config::default().wallpaper_settings.min_recommended_duration as f64;
+        let min_duration = Config::default().video_settings.min_recommended_duration as f64;
 
         let mut processed_input_path = input_path.to_path_buf();
 
@@ -468,7 +487,7 @@ impl Downloader {
         logger::info(&format!("Command: yt-dlp {}", args.join(" ")));
         
         // Start download process
-        let mut child = Command::new("yt-dlp")
+        let child = Command::new("yt-dlp")
             .args(&args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -524,30 +543,31 @@ impl Downloader {
 
     async fn download_with_retry(&mut self, url: &str, video_format: &VideoFormat, audio_format: &Option<AudioFormat>, output_path: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
         let config = Config::default();
-        let mut last_error = None;
-        
+        let mut _last_error = None;
+
         for attempt in 1..=config.download_settings.retry_attempts {
             if attempt > 1 {
                 logger::warning(&format!("Retry attempt {}/{}", attempt, config.download_settings.retry_attempts));
                 // Wait a bit before retrying
                 tokio::time::sleep(Duration::from_secs(2)).await;
             }
-            
+
             match self.download_video(url, video_format, audio_format, output_path).await {
                 Ok(result) => return Ok(result),
                 Err(error) => {
-                    last_error = Some(error);
-                    logger::error(&format!("Attempt {} failed: {}", attempt, last_error.as_ref().unwrap()));
-                    
+                    let error_msg = error.to_string();
+                    logger::error(&format!("Attempt {} failed: {}", attempt, error_msg));
+
                     if attempt == config.download_settings.retry_attempts {
-                        return Err(format!("Download failed after {} attempts. Last error: {}", 
-                            config.download_settings.retry_attempts, 
-                            last_error.unwrap()).into());
+                        return Err(format!("Download failed after {} attempts. Last error: {}",
+                            config.download_settings.retry_attempts,
+                            error_msg).into());
                     }
+                    _last_error = Some(error);
                 }
             }
         }
-        
+
         unreachable!()
     }
 

@@ -1,13 +1,13 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+
 use std::os::unix::fs::PermissionsExt;
 use regex::Regex;
 
 pub fn format_file_size(bytes: Option<u64>) -> String {
     match bytes {
         None | Some(0) => "Unknown size".into(),
-        Some(mut size) => {
+        Some(size) => {
             let units = ["B", "KB", "MB", "GB", "TB"];
             let mut unit_index = 0usize;
             let mut s = size as f64;
@@ -89,7 +89,7 @@ pub fn create_safe_filename(title: &str, quality: &str, extension: &str, max_len
     let config = crate::config::Config::default();
     
     // Clean title
-    let invalid_chars = &config.file_naming.invalid_chars;
+    let _invalid_chars = &config.file_naming.invalid_chars;
     let replacement = config.file_naming.space_replacement;
     
     let mut s: String = title
@@ -217,7 +217,7 @@ pub fn has_permission_issues(file_path: &Path) -> bool {
     
     // Try to check write access
     match fs::metadata(file_path) {
-        Ok(metadata) => {
+        Ok(_metadata) => {
             // Check if we can write to the file
             match fs::OpenOptions::new().write(true).open(file_path) {
                 Ok(_) => false, // Can write, no permission issues
@@ -229,11 +229,11 @@ pub fn has_permission_issues(file_path: &Path) -> bool {
 }
 
 pub fn fix_file_permissions(file_path: &Path) -> Result<bool, Box<dyn std::error::Error>> {
-    use std::process::Command;
-    
+
+
     // Basic implementation - would need more sophisticated permission handling
     match fs::metadata(file_path) {
-        Ok(metadata) => {
+        Ok(_metadata) => {
             // Set readable/writable permissions for user and group (0o664)
             let perms = fs::Permissions::from_mode(0o664);
             fs::set_permissions(file_path, perms)?;

@@ -1,8 +1,8 @@
 use std::process::Command;
 use std::time::Duration;
-use rust_downloader::{logger, Config, wallpaper_manager};
+use rust_downloader::{logger, Config};
 use rust_downloader::utils;
-use std::io::Write;
+
 
 pub struct RefreshUtility {
     customer_dir: std::path::PathBuf,
@@ -12,8 +12,8 @@ pub struct RefreshUtility {
 impl RefreshUtility {
     pub fn new() -> Self {
         let config = Config::default();
-        let customer_dir = std::path::PathBuf::from(config.wallpaper_settings.customer_dir);
-        let target_dir = customer_dir.join(config.wallpaper_settings.target_sub_dir);
+        let customer_dir = std::path::PathBuf::from(config.video_settings.customer_dir);
+        let target_dir = customer_dir.join(config.video_settings.target_sub_dir);
         
         Self {
             customer_dir,
@@ -22,11 +22,11 @@ impl RefreshUtility {
     }
 
     pub async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        logger::header(" Wallpaper Refresh Utility");
-        logger::info("Fix wallpaper animation issues and refresh the wallpaper system");
+        logger::header(" Video Refresh Utility");
+        logger::info("Fix video animation issues and refresh the video system");
         logger::info("═══════════════════════════════════════════════════");
 
-        // Check if we have access to wallpaper directories
+        // Check if we have access to video directories
         if !self.customer_dir.exists() {
             logger::error(" Customer directory not found");
             logger::info("This utility requires administrator privileges");
@@ -35,31 +35,31 @@ impl RefreshUtility {
         }
 
         if !self.target_dir.exists() {
-            logger::warning(" Target wallpaper directory not found");
+            logger::warning(" Target video directory not found");
             logger::info("You may need to set up a live wallpaper first");
             return Err("Target directory not found".into());
         }
 
-        // Show current wallpaper status
+        // Show current video status
         self.show_wallpaper_status().await?;
 
         // Perform refresh operations
-        logger::info("Starting wallpaper refresh process...");
-        
-        // Method 1: Restart wallpaper daemon
-        self.restart_wallpaper_daemon().await?;
+        logger::info("Starting video refresh process...");
+
+        // Method 1: Restart video daemon
+        self.restart_video_daemon().await?;
         
         // Method 2: Force desktop refresh
         self.force_desktop_refresh().await?;
         
-        // Method 3: Touch wallpaper files
-        self.touch_wallpaper_files().await?;
+        // Method 3: Touch video files
+        self.touch_video_files().await?;
         
         // Method 4: Refresh through System Events
         self.refresh_via_system_events().await?;
 
-        logger::success(" Wallpaper refresh completed!");
-        logger::info(" If your wallpaper still appears static:");
+        logger::success(" Video refresh completed!");
+        logger::info(" If your video still appears static:");
         logger::info("   1. Try locking and unlocking your screen");
         logger::info("   2. Restart your Mac");
         logger::info("   3. Check System Preferences > Desktop & Screen Saver");
@@ -106,14 +106,14 @@ impl RefreshUtility {
                 }
             }
         } else {
-            logger::warning("  Could not read wallpaper directory");
+            logger::warning("  Could not read video directory");
         }
 
         Ok(())
     }
 
-    async fn restart_wallpaper_daemon(&self) -> Result<(), Box<dyn std::error::Error>> {
-        logger::info("Restarting wallpaper daemon...");
+    async fn restart_video_daemon(&self) -> Result<(), Box<dyn std::error::Error>> {
+        logger::info("Restarting video daemon...");
 
         let commands = vec![
             vec!["sudo", "launchctl", "unload", "/System/Library/LaunchDaemons/com.apple.idleassetsd.plist"],
@@ -132,7 +132,7 @@ impl RefreshUtility {
             }
         }
 
-        logger::success(" Wallpaper daemon restart attempted");
+        logger::success(" video daemon restart attempted");
         Ok(())
     }
 
@@ -164,8 +164,8 @@ end tell"#;
         Ok(())
     }
 
-    async fn touch_wallpaper_files(&self) -> Result<(), Box<dyn std::error::Error>> {
-        logger::info(" Touching wallpaper files to trigger refresh...");
+    async fn touch_video_files(&self) -> Result<(), Box<dyn std::error::Error>> {
+        logger::info(" Touching video files to trigger refresh...");
 
         // Find all .mov and .mp4 files and touch them
         let find_command = format!("find \"{}\" -name \"*.mov\" -o -name \"*.mp4\" -exec touch {{}} \\; 2>/dev/null", 
@@ -177,9 +177,9 @@ end tell"#;
             .output()?;
 
         if output.status.success() {
-            logger::success(" Wallpaper files touched - refresh triggered");
+            logger::success(" Video files touched - refresh triggered");
         } else {
-            logger::warning(" Could not touch wallpaper files");
+            logger::warning(" Could not touch video files");
         }
 
         Ok(())
@@ -194,7 +194,7 @@ end tell"#;
             .output()?;
 
         if killall_output.status.success() {
-            logger::info("Dock restarted (may help with wallpaper refresh)");
+            logger::info("Dock restarted (may help with video refresh)");
         }
 
         // Wait a moment for the system to settle
@@ -205,14 +205,14 @@ end tell"#;
     }
 
     pub async fn quick_refresh() -> Result<(), Box<dyn std::error::Error>> {
-        logger::header("⚡ Quick Wallpaper Refresh");
-        logger::info("Performing rapid wallpaper refresh...");
+        logger::header(" Quick Video Refresh");
+        logger::info("Performing rapid video refresh...");
 
         // Quick refresh without detailed status
-        let mut refresh = RefreshUtility::new();
+        let refresh = RefreshUtility::new();
         
         // Just touch files and restart dock
-        refresh.touch_wallpaper_files().await?;
+        refresh.touch_video_files().await?;
         
         let output = Command::new("killall")
             .args(["Dock"])
@@ -241,18 +241,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut refresh = RefreshUtility::new();
         match refresh.run().await {
             Ok(_) => {
-                logger::success(" Wallpaper refresh completed successfully!");
+                logger::success(" video refresh completed successfully!");
             }
             Err(error) => {
-                logger::error(&format!(" Wallpaper refresh failed: {}", error));
-                
+                logger::error(&format!(" Video refresh failed: {}", error));
+
                 // Suggest alternative actions
                 logger::info(" Alternative solutions:");
                 logger::info("   1. Lock and unlock your screen");
                 logger::info("   2. Restart your Mac");
                 logger::info("   3. Go to System Preferences > Desktop & Screen Saver");
-                logger::info("   4. Try selecting a different wallpaper and then back");
-                
+                logger::info("   4. Try selecting a different video and then back");
+
                 std::process::exit(1);
             }
         }

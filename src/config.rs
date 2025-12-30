@@ -26,14 +26,23 @@ pub struct DownloadSettings {
     pub embed_subtitles: bool,
     pub embed_thumbnail: bool,
     pub convert_to_mov: bool,
-    pub optimize_for_wallpaper: bool,
+    pub optimize_for_video: bool,
     pub use_hevc: bool,
     pub target_frame_rate: u32,
     pub target_resolution: &'static str,
 }
 
 #[derive(Debug, Clone)]
-pub struct WallpaperSettings {
+pub struct ConversionSettings {
+    pub max_attempts: u32,
+    pub fallback_resolutions: Vec<&'static str>,
+    pub fallback_bitrates: Vec<&'static str>,
+    pub fallback_frame_rates: Vec<u32>,
+    pub conservative_mode: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct VideoSettings {
     pub customer_dir: &'static str,
     pub target_sub_dir: &'static str,
     pub backup_dir: &'static str,
@@ -95,13 +104,14 @@ pub struct FileNamingConfig {
 
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub enable_wallpaper: bool,
+    pub enable_video: bool,
     pub output_dir: PathBuf,
     
     pub video_preferences: VideoPreferences,
     pub audio_preferences: AudioPreferences,
     pub download_settings: DownloadSettings,
-    pub wallpaper_settings: WallpaperSettings,
+    pub conversion_settings: ConversionSettings,
+    pub video_settings: VideoSettings,
     pub logging: LoggingConfig,
     pub dependencies: Vec<DependencyConfig>,
     pub file_naming: FileNamingConfig,
@@ -110,7 +120,7 @@ pub struct Config {
 impl Config {
     pub fn default() -> Self {
         Self {
-            enable_wallpaper: false,
+            enable_video: false,
             output_dir: PathBuf::from("outputs"),
             
             video_preferences: VideoPreferences {
@@ -135,16 +145,24 @@ impl Config {
                 embed_subtitles: false,
                 embed_thumbnail: false,
                 convert_to_mov: true,
-                optimize_for_wallpaper: true,
+                optimize_for_video: true,
                 use_hevc: true,
                 target_frame_rate: 60,
                 target_resolution: "3840x2160",
             },
 
-            wallpaper_settings: WallpaperSettings {
+            conversion_settings: ConversionSettings {
+                max_attempts: 5,
+                fallback_resolutions: vec!["3840x2160", "2560x1440", "1920x1080", "1280x720"],
+                fallback_bitrates: vec!["50M", "30M", "20M", "10M"],
+                fallback_frame_rates: vec![60, 30, 24],
+                conservative_mode: false,
+            },
+
+            video_settings: VideoSettings {
                 customer_dir: "/Library/Application Support/com.apple.idleassetsd/Customer",
                 target_sub_dir: "4KSDR240FPS",
-                backup_dir: "wallpaper_backups",
+                backup_dir: "video_backups",
                 required_format: ".mov",
                 min_recommended_resolution: 2160, // 4K
                 min_recommended_duration: 60, // 1 minute in seconds
