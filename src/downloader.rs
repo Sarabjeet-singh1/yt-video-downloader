@@ -27,33 +27,42 @@ impl Downloader {
         utils::create_safe_filename(
             &info.title,
             &quality,
-            self.get_extension(),
+            self.get_extension(config),
             config.file_naming.max_title_length,
         )
     }
 
-    fn get_extension(&self) -> &'static str {
-        Config::default().download_settings.merge_output_format
+    fn get_extension<'a>(&self, config: &'a Config) -> &'a str {
+        config.download_settings.merge_output_format
     }
 
-    fn check_existing_video(&self, output_path: &Path) -> (bool, Option<PathBuf>, bool) {
-        // First check for .mov version (final format)
-        let mov_path = output_path.with_extension("mov");
-        if mov_path.exists() {
-            if let Ok(stats) = fs::metadata(&mov_path) {
-                logger::success(&format!("📁 Final .mov video already exists: {}", mov_path.file_name().unwrap().to_string_lossy()));
-                logger::stats(&format!("📊 Size: {}", utils::format_file_size(Some(stats.len()))));
-                return (true, Some(mov_path), false);
+    fn check_existing_video(&self, output_path: &Path, convert_to_mov: bool) -> (bool, Option<PathBuf>, bool) {
+        if convert_to_mov {
+            // First check for .mov version (final format)
+            let mov_path = output_path.with_extension("mov");
+            if mov_path.exists() {
+                if let Ok(stats) = fs::metadata(&mov_path) {
+                    logger::success(&format!("📁 Final .mov video already exists: {}", mov_path.file_name().unwrap().to_string_lossy()));
+                    logger::stats(&format!("📊 Size: {}", utils::format_file_size(Some(stats.len()))));
+                    return (true, Some(mov_path), false);
+                }
             }
-        }
 
-        // Then check for original format (needs conversion)
-        if output_path.exists() {
+            // Then check for original format (needs conversion)
+            if output_path.exists() {
+                if let Ok(stats) = fs::metadata(output_path) {
+                    logger::success(&format!("📁 Source video exists: {}", output_path.file_name().unwrap().to_string_lossy()));
+                    logger::stats(&format!("📊 Size: {}", utils::format_file_size(Some(stats.len()))));
+                    logger::info("🔄 Will convert to .mov format");
+                    return (true, Some(output_path.to_path_buf()), true);
+                }
+            }
+        } else if output_path.exists() {
+            // MP4 is already the final format.
             if let Ok(stats) = fs::metadata(output_path) {
-                logger::success(&format!("📁 Source video exists: {}", output_path.file_name().unwrap().to_string_lossy()));
+                logger::success(&format!("📁 Final .mp4 video already exists: {}", output_path.file_name().unwrap().to_string_lossy()));
                 logger::stats(&format!("📊 Size: {}", utils::format_file_size(Some(stats.len()))));
-                logger::info("🔄 Will convert to .mov format for wallpaper compatibility");
-                return (true, Some(output_path.to_path_buf()), true);
+                return (true, Some(output_path.to_path_buf()), false);
             }
         }
 
@@ -187,43 +196,10 @@ impl Downloader {
             logger::warning(" Converted file seems too small, keeping source file for safety");
             return Ok(());
         }
-
-        // Only clean up MP4 files (not other formats)
-        if source_path.extension().and_then(|e| e.to_str()) == Some("mp4") {
-            logger::info(&format!("Cleaning up source MP4 file: {}", source_path.file_name().unwrap().to_string_lossy()));
-
-            match fs::remove_file(source_path) {
-                Ok(_) => {
-                    logger::success("Source MP4 file cleaned up successfully");
-                }
-                Err(e) => {
-                    if e.kind() == std::io::ErrorKind::PermissionDenied {
-                        logger::info(" Fixing permissions before cleanup...");
-                        match utils::fix_file_permissions(source_path) {
-                            Ok(true) => {
-                                match fs::remove_file(source_path) {
-                                    Ok(_) => logger::success("Source MP4 file cleaned up after permission fix"),
-                                    Err(second_e) => {
-                                        logger::warning(&format!("  Could not delete MP4 file: {}", second_e));
-                                        logger::info(" You may need to manually delete the MP4 file later");
-                                    }
-                                }
-                            }
-                            Ok(false) => {
-                                logger::warning(&format!(" Could not delete MP4 file: {}", e));
-                                logger::info("You may need to manually delete the MP4 file later");
-                            }
-                            Err(perm_e) => {
-                                logger::warning(&format!("Permission fix failed: {}", perm_e));
-                            }
-                        }
-                    } else {
-                        logger::warning(&format!("Failed to clean up source file: {}", e));
-                        logger::info(" Source file will be kept for safety");
-                    }
-                }
-            }
-        }
+        logger::info(&format!(
+            "Keeping source file alongside converted output: {}",
+            source_path.file_name().unwrap_or_default().to_string_lossy()
+        ));
 
         Ok(())
     }
@@ -392,6 +368,90 @@ impl Downloader {
         unreachable!("Should have returned from within the loop")
     }
 
+    async fn remux_to_mov(&self, input_path: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+        let output_path = input_path.with_extension("mov");
+
+        if output_path.exists() {
+            logger::success(&format!(
+                ".mov version already exists: {}",
+                output_path.file_name().unwrap().to_string_lossy()
+            ));
+            return Ok(output_path);
+        }
+
+        logger::convert("Converting to .mov format (fast remux)...");
+
+        // Fast path: keep existing codecs and only change container.
+        let remux = Command::new("ffmpeg")
+            .args([
+                "-v", "error",
+                "-y",
+                "-i", input_path.to_str().unwrap(),
+                "-c", "copy",
+                "-movflags", "+faststart",
+                output_path.to_str().unwrap(),
+            ])
+            .output()?;
+
+        if !remux.status.success() {
+            logger::warning("Fast remux failed, retrying with hardware re-encode (H.264/AAC)...");
+
+            let hw_fallback = Command::new("ffmpeg")
+                .args([
+                    "-v", "error",
+                    "-y",
+                    "-i", input_path.to_str().unwrap(),
+                    "-c:v", "h264_videotoolbox",
+                    "-c:a", "aac",
+                    "-movflags", "+faststart",
+                    output_path.to_str().unwrap(),
+                ])
+                .output()?;
+
+            if !hw_fallback.status.success() {
+                logger::warning("Hardware re-encode failed, retrying with software re-encode (H.264/AAC)...");
+
+                let sw_fallback = Command::new("ffmpeg")
+                    .args([
+                        "-v", "error",
+                        "-y",
+                        "-i", input_path.to_str().unwrap(),
+                        "-c:v", "libx264",
+                        "-c:a", "aac",
+                        "-movflags", "+faststart",
+                        output_path.to_str().unwrap(),
+                    ])
+                    .output()?;
+
+                if !sw_fallback.status.success() {
+                    let remux_err = String::from_utf8_lossy(&remux.stderr);
+                    let hw_err = String::from_utf8_lossy(&hw_fallback.stderr);
+                    let sw_err = String::from_utf8_lossy(&sw_fallback.stderr);
+
+                    return Err(format!(
+                        "MOV conversion failed. Remux error: {} | HW fallback error: {} | SW fallback error: {}",
+                        remux_err.lines().next().unwrap_or("unknown"),
+                        hw_err.lines().next().unwrap_or("unknown"),
+                        sw_err.lines().next().unwrap_or("unknown")
+                    ).into());
+                }
+            }
+        }
+
+        if output_path.exists() {
+            if let Ok(stats) = fs::metadata(&output_path) {
+                logger::success(&format!(
+                    ".mov conversion completed: {}",
+                    output_path.file_name().unwrap().to_string_lossy()
+                ));
+                logger::stats(&format!(".mov size: {}", utils::format_file_size(Some(stats.len()))));
+            }
+        }
+
+        self.cleanup_source_file(input_path, &output_path).await?;
+        Ok(output_path)
+    }
+
     async fn convert_to_mov(&self, input_path: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
         let output_path = input_path.with_extension("mov");
 
@@ -445,7 +505,7 @@ impl Downloader {
         utils::parse_progress(line)
     }
 
-    async fn download_video(&mut self, url: &str, video_format: &VideoFormat, audio_format: &Option<AudioFormat>, output_path: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    async fn download_video(&mut self, url: &str, video_format: &VideoFormat, audio_format: &Option<AudioFormat>, output_path: &Path, config: &crate::config::Config) -> Result<PathBuf, Box<dyn std::error::Error>> {
         logger::header("Starting Download");
         logger::download(&format!("Output: {}", output_path.display()));
         
@@ -465,13 +525,12 @@ impl Downloader {
         let mut args = vec![
             "-f", &format_arg,
             "-o", final_output_path.to_str().unwrap(),
-            "--merge-output-format", self.get_extension(),
+            "--merge-output-format", self.get_extension(config),
             "--progress",
             "--newline"
         ];
         
         // Add optional settings
-        let config = Config::default();
         if config.download_settings.embed_subtitles {
             args.push("--embed-subs");
         }
@@ -539,8 +598,7 @@ impl Downloader {
         }
     }
 
-    async fn download_with_retry(&mut self, url: &str, video_format: &VideoFormat, audio_format: &Option<AudioFormat>, output_path: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
-        let config = Config::default();
+    async fn download_with_retry(&mut self, url: &str, video_format: &VideoFormat, audio_format: &Option<AudioFormat>, output_path: &Path, config: &crate::config::Config) -> Result<PathBuf, Box<dyn std::error::Error>> {
         let mut _last_error = None;
 
         for attempt in 1..=config.download_settings.retry_attempts {
@@ -550,7 +608,7 @@ impl Downloader {
                 tokio::time::sleep(Duration::from_secs(2)).await;
             }
 
-            match self.download_video(url, video_format, audio_format, output_path).await {
+            match self.download_video(url, video_format, audio_format, output_path, config).await {
                 Ok(result) => return Ok(result),
                 Err(error) => {
                     let error_msg = error.to_string();
@@ -596,13 +654,17 @@ impl Downloader {
         utils::ensure_directory_exists(&config.output_dir).ok();
 
         // Check if video already exists
-        let (exists, existing_path, needs_conversion) = self.check_existing_video(&output_path);
+        let (exists, existing_path, needs_conversion) = self.check_existing_video(&output_path, config.download_settings.convert_to_mov);
         let final_path;
 
         if exists && !needs_conversion {
-            // .mov file already exists, we're done
+            // Final output file already exists, we're done
             final_path = existing_path.unwrap();
-            logger::info(" Using existing .mov video, no processing needed");
+            if config.download_settings.convert_to_mov {
+                logger::info(" Using existing .mov video, no processing needed");
+            } else {
+                logger::info(" Using existing .mp4 video, no processing needed");
+            }
             return Ok(final_path);
         } else if exists && needs_conversion {
             // Source file exists but needs conversion
@@ -614,15 +676,20 @@ impl Downloader {
                 url,
                 &analysis.video_format,
                 &analysis.audio_format,
-                &output_path
+                &output_path,
+                config
             ).await?;
             logger::success(&format!("Video downloaded successfully: {}", final_path.file_name().unwrap().to_string_lossy()));
         }
 
-        // Convert to .mov format for wallpaper compatibility
-        let config = Config::default();
+        // Convert to .mov when requested.
         if config.download_settings.convert_to_mov {
-            let mov_path = self.convert_to_mov(&final_path).await?;
+            // Use wallpaper-optimized conversion only when wallpaper mode is enabled.
+            let mov_path = if config.enable_video {
+                self.convert_to_mov(&final_path).await?
+            } else {
+                self.remux_to_mov(&final_path).await?
+            };
             return Ok(mov_path);
         }
 

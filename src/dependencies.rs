@@ -82,15 +82,14 @@ impl DependencyChecker {
         }
     }
 
-    pub async fn check_all_dependencies(&self) -> Vec<DependencyResult> {
+    pub async fn check_all_dependencies(&self, config: &Config) -> Vec<DependencyResult> {
         logger::header("Checking Dependencies");
         
         let mut results = Vec::new();
-        let config = Config::default();
         
         for dependency in &config.dependencies {
             logger::info(&format!("Checking {}...", dependency.command));
-            let result = self.check_dependency(dependency.command, &config).await;
+            let result = self.check_dependency(dependency.command, config).await;
             results.push(result.clone());
             
             if result.available {
@@ -107,7 +106,12 @@ impl DependencyChecker {
     }
 
     pub async fn validate_environment(&self) -> Result<Vec<DependencyResult>, Box<dyn std::error::Error>> {
-        let results = self.check_all_dependencies().await;
+        let config = Config::default();
+        self.validate_environment_with_config(&config).await
+    }
+
+    pub async fn validate_environment_with_config(&self, config: &Config) -> Result<Vec<DependencyResult>, Box<dyn std::error::Error>> {
+        let results = self.check_all_dependencies(config).await;
         let missing: Vec<_> = results.iter().filter(|r| !r.available).collect();
         
         if !missing.is_empty() {
@@ -171,11 +175,10 @@ impl DependencyChecker {
         Err("Administrator privileges required. Please restart with sudo.".into())
     }
 
-    pub async fn check_system_resources(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn check_system_resources(&self, config: &Config) -> Result<(), Box<dyn std::error::Error>> {
         logger::info("Checking system resources...");
         
         // Check available disk space (basic check)
-        let config = Config::default();
         match std::fs::metadata(&config.output_dir) {
             Ok(_) => {
                 logger::success("Output directory is accessible");
@@ -199,11 +202,10 @@ impl DependencyChecker {
         Ok(())
     }
 
-    pub async fn perform_full_check(&self) -> Result<bool, Box<dyn std::error::Error>> {
+    pub async fn perform_full_check(&self, config: &Config) -> Result<bool, Box<dyn std::error::Error>> {
         logger::header("Environment Check");
 
         // Check sudo privileges first only when wallpaper installation is enabled
-        let config = Config::default();
         if config.enable_video {
             if !Self::check_sudo_privileges() {
                 Self::prompt_for_sudo()?;
@@ -216,10 +218,10 @@ impl DependencyChecker {
         Self::check_node_version();
 
         // Check system resources
-        self.check_system_resources().await?;
+        self.check_system_resources(config).await?;
 
         // Check dependencies
-        self.validate_environment().await?;
+        self.validate_environment_with_config(config).await?;
 
         logger::success("Environment check completed successfully!");
         Ok(true)
@@ -248,4 +250,3 @@ impl DependencyChecker {
         check_euid() == 0
     }
 }
-

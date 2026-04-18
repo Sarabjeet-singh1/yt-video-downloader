@@ -1,13 +1,18 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
-use std::io::Write;
 use rust_downloader::{logger, Config, video_info, downloader, video_manager, dependencies, utils};
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+enum OutputFormat {
+    Mp4,
+    Mov,
+}
 
 #[derive(Parser, Debug)]
 #[command(name = "rust-downloader")]
-#[command(about = "Race into the future with stunning live video! Transform any YouTube video into a dynamic video with precision and speed.", long_about = None)]
+#[command(about = "Race into the future with stunning live video! Transform online videos into dynamic local files with precision and speed.", long_about = None)]
 struct Args {
-    /// YouTube URL to download (optional). If omitted, you'll be prompted to paste one.
+    /// Video URL to download (YouTube, Instagram, X/Twitter). If omitted, you'll be prompted to paste one.
     url: Option<String>,
     
     /// Disable video installation (download only mode)
@@ -17,6 +22,10 @@ struct Args {
     /// Enable video installation (requires sudo)
     #[arg(long)]
     video: bool,
+
+    /// Output format (mp4 or mov)
+    #[arg(long, value_enum)]
+    format: Option<OutputFormat>,
     
     /// Custom output directory
     #[arg(short, long)]
@@ -30,7 +39,7 @@ enum Commands {
     
     /// Download video only (no video installation)
     Download {
-        /// YouTube URL to download
+        /// Video URL to download
         url: String,
         
         /// Custom output directory
@@ -40,7 +49,7 @@ enum Commands {
     
     /// Download and install as video
     Video {
-        /// YouTube URL to download and install
+        /// Video URL to download and install
         url: String,
         
         /// Custom output directory
@@ -59,7 +68,7 @@ fn prompt_for_url() -> Result<String, Box<dyn std::error::Error>> {
     use std::io::{self, Write};
     
     loop {
-        print!("Enter the YouTube video URL: ");
+        print!("Enter the video URL (YouTube/Instagram/X): ");
         io::stdout().flush().ok();
         
         let mut input = String::new();
@@ -74,13 +83,52 @@ fn prompt_for_url() -> Result<String, Box<dyn std::error::Error>> {
             continue;
         }
         
-        if utils::validate_youtube_url(url) {
+        if utils::validate_supported_url(url) {
+            let platform = utils::detect_platform(url);
             if let Some(id) = utils::extract_video_id(url) {
-            logger::success(&format!("Valid YouTube URL detected: {}", id));
-        }
+                logger::success(&format!("Valid {} URL detected: {}", platform, id));
+            } else {
+                logger::success(&format!("Valid {} URL detected", platform));
+            }
             return Ok(url.to_string());
         } else {
-            logger::error("Invalid YouTube URL. Please provide a valid YouTube link.");
+            logger::error("Invalid URL. Please provide a valid YouTube, Instagram, or X/Twitter link.");
+        }
+    }
+}
+
+fn prompt_for_output_format() -> Result<OutputFormat, Box<dyn std::error::Error>> {
+    use std::io::{self, Write};
+
+    println!();
+    logger::info("Choose output format:");
+    logger::info("   1. mp4 (faster, no conversion)");
+    logger::info("   2. mov (HEVC optimized for macOS live wallpaper)");
+
+    loop {
+        print!("Select format [1/2] (default: 2): ");
+        io::stdout().flush().ok();
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+
+        match input.trim().to_lowercase().as_str() {
+            "" | "2" | "mov" => return Ok(OutputFormat::Mov),
+            "1" | "mp4" => return Ok(OutputFormat::Mp4),
+            _ => logger::warning("Invalid choice. Enter 1/mp4 or 2/mov."),
+        }
+    }
+}
+
+fn apply_output_format(config: &mut Config, format: OutputFormat) {
+    match format {
+        OutputFormat::Mp4 => {
+            config.download_settings.convert_to_mov = false;
+            logger::info("Output format set to mp4");
+        }
+        OutputFormat::Mov => {
+            config.download_settings.convert_to_mov = true;
+            logger::info("Output format set to mov");
         }
     }
 }
@@ -143,13 +191,15 @@ fn setup_signal_handlers() {
 
 #[allow(dead_code)]
 fn display_usage() {
-    logger::header("Rust YouTube Downloader ");
+    logger::header("Rust Video Downloader ");
     logger::info("==========================================================");
     logger::info("");
     logger::info("Usage:");
     logger::info("   rust-downloader                    (interactive mode)");
     logger::info("   rust-downloader URL                (direct download)");
     logger::info("   rust-downloader --video URL         (with video installation)");
+    logger::info("   rust-downloader --format mp4 URL    (download mp4 output)");
+    logger::info("   rust-downloader --format mov URL    (download mov output)");
     logger::info("   rust-downloader --help              (show this help)");
     logger::info("");
     logger::info("Commands:");
@@ -162,10 +212,14 @@ fn display_usage() {
     logger::info("   rust-downloader                     # Start interactive video downloader");
     logger::info("   rust-downloader https://youtu.be/dQw4w9WgXcQ");
     logger::info("   rust-downloader --video https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    logger::info("   rust-downloader https://www.instagram.com/reel/REEL_ID/");
+    logger::info("   rust-downloader https://x.com/username/status/1234567890");
+    logger::info("   rust-downloader --format mp4 https://youtu.be/dQw4w9WgXcQ");
     logger::info("");
     logger::info("Tips:");
     logger::info("   • Use --video flag for automatic video installation (requires sudo)");
-    logger::info("   • Videos are converted to 4K 60fps HEVC .mov format");
+    logger::info("   • Use --format mp4 or --format mov to choose output format");
+    logger::info("   • .mov uses HEVC conversion for macOS wallpaper compatibility");
     logger::info("   • Original files are cleaned up after conversion");
     logger::info("   • Run 'cargo run --bin cleanup' to fix permission issues");
     logger::info("   • Run 'cargo run --bin refresh' to refresh video animation");
@@ -196,6 +250,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if args.download_only {
         config.enable_video = false;
     }
+
+    if let Some(format) = args.format {
+        apply_output_format(&mut config, format);
+    }
     
     if let Some(output_dir) = &args.output {
         config.output_dir = Config::expand_tilde(output_dir.to_str().unwrap_or(""));
@@ -214,7 +272,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     } else {
         // Interactive mode
-        interactive_mode(&config, start_time).await
+        interactive_mode(&config, start_time, args.format).await
     };
 
     match command_result {
@@ -232,8 +290,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn run_with_video(url: &str, config: &Config, _start_time: std::time::SystemTime) -> Result<(PathBuf, bool), Box<dyn std::error::Error>> {
-    logger::header("Rust YouTube Downloader ");
-    logger::info("Transform YouTube videos for any purpose");
+    logger::header("Rust Video Downloader ");
+    logger::info("Transform online videos for any purpose");
     logger::info("Intelligent automation with comprehensive error handling");
     println!();
 
@@ -242,7 +300,7 @@ async fn run_with_video(url: &str, config: &Config, _start_time: std::time::Syst
 
     // Check environment and dependencies
     let dependency_checker = dependencies::DependencyChecker::new();
-    dependency_checker.perform_full_check().await?;
+    dependency_checker.perform_full_check(config).await?;
 
     // Analyze video
     let analysis = video_info::analyze(url)?;
@@ -265,8 +323,8 @@ async fn run_with_video(url: &str, config: &Config, _start_time: std::time::Syst
 }
 
 async fn run_download_only(url: &str, config: &Config, _start_time: std::time::SystemTime) -> Result<(PathBuf, bool), Box<dyn std::error::Error>> {
-    logger::header("Rust YouTube Downloader");
-    logger::info("Download and convert YouTube videos for any purpose");
+    logger::header("Rust Video Downloader");
+    logger::info("Download and convert online videos for any purpose");
     println!();
 
     // Setup signal handlers
@@ -276,7 +334,7 @@ async fn run_download_only(url: &str, config: &Config, _start_time: std::time::S
     let dependency_checker = dependencies::DependencyChecker::new();
     let mut check_config = config.clone();
     check_config.enable_video = false; // Override to skip sudo check
-    let _ = dependency_checker.perform_full_check().await;
+    let _ = dependency_checker.perform_full_check(&check_config).await;
 
     // Analyze video
     let analysis = video_info::analyze(url)?;
@@ -288,40 +346,30 @@ async fn run_download_only(url: &str, config: &Config, _start_time: std::time::S
     Ok((download_path, false))
 }
 
-async fn interactive_mode(config: &Config, start_time: std::time::SystemTime) -> Result<(PathBuf, bool), Box<dyn std::error::Error>> {
+async fn interactive_mode(config: &Config, start_time: std::time::SystemTime, cli_format: Option<OutputFormat>) -> Result<(PathBuf, bool), Box<dyn std::error::Error>> {
     // Display header
-    logger::header("Rust YouTube Downloader ");
-    logger::info("Transform YouTube videos into your local machine");
+    logger::header("Rust Video Downloader ");
+    logger::info("Transform online videos into your local machine");
     logger::info("Intelligent automation with comprehensive error handling");
     println!();
 
-    // Get YouTube URL interactively
+    // Get URL interactively
     let url = prompt_for_url()?;
 
-    // Ask user about video installation
+    // Keep interactive mode download-focused by default.
+    // Wallpaper installation is only used when explicitly enabled via --video.
     let mut final_config = config.clone();
     if !config.enable_video {
-        println!();
-        logger::info("Supported URL formats:");
-        logger::info("   • https://www.youtube.com/watch?v=VIDEO_ID");
-        logger::info("   • https://youtu.be/VIDEO_ID");
-        logger::info("   • https://www.youtube.com/embed/VIDEO_ID");
-        logger::info("   • https://www.youtube.com/v/VIDEO_ID");
-        println!();
+        final_config.enable_video = false;
+        logger::info("Running in download-only mode");
+        logger::info("Tip: pass --video only if you want wallpaper installation.");
+    }
 
-        print!("Do you want to install this as a live video? (y/N): ");
-        std::io::stdout().flush().ok();
-
-        let mut input = String::new();
-        std::io::stdin().read_line(&mut input)?;
-
-        if input.trim().to_lowercase() == "y" || input.trim().to_lowercase() == "yes" {
-            final_config.enable_video = true;
-            logger::info("video installation enabled");
-            println!();
-        } else {
-            logger::info("Running in download-only mode");
-        }
+    if let Some(format) = cli_format {
+        apply_output_format(&mut final_config, format);
+    } else {
+        let selected = prompt_for_output_format()?;
+        apply_output_format(&mut final_config, selected);
     }
 
     if final_config.enable_video {

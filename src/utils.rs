@@ -146,12 +146,16 @@ pub fn get_file_stats(file_path: &Path) -> Option<fs::Metadata> {
     }
 }
 
-pub fn validate_youtube_url(url: &str) -> bool {
+pub fn validate_supported_url(url: &str) -> bool {
     let patterns = [
         r"^https?://(www\.)?youtube\.com/watch\?v=[\w-]+",
         r"^https?://(www\.)?youtu\.be/[\w-]+",
         r"^https?://(www\.)?youtube\.com/embed/[\w-]+",
         r"^https?://(www\.)?youtube\.com/v/[\w-]+",
+        r"^https?://(www\.)?instagram\.com/(reel|p|tv)/[\w-]+",
+        r"^https?://(www\.)?x\.com/[^/]+/status/\d+",
+        r"^https?://(www\.)?twitter\.com/[^/]+/status/\d+",
+        r"^https?://t\.co/[\w-]+",
     ];
 
     for p in patterns.iter() {
@@ -162,6 +166,19 @@ pub fn validate_youtube_url(url: &str) -> bool {
         }
     }
     false
+}
+
+pub fn detect_platform(url: &str) -> &'static str {
+    let lower = url.to_lowercase();
+    if lower.contains("youtube.com") || lower.contains("youtu.be") {
+        "YouTube"
+    } else if lower.contains("instagram.com") {
+        "Instagram"
+    } else if lower.contains("x.com") || lower.contains("twitter.com") || lower.contains("t.co/") {
+        "X/Twitter"
+    } else {
+        "Supported"
+    }
 }
 
 pub fn extract_video_id(url: &str) -> Option<String> {
